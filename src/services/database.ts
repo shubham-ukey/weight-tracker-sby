@@ -128,6 +128,8 @@ export const updateUserWeight = async (userId: string, newWeight: number): Promi
     throw new Error('Weight must be between 30 and 300 kg');
   }
 
+  console.log('Starting weight update process for user:', userId, 'new weight:', newWeight);
+
   // First, update current weight in users table
   const { data: userData, error: userError } = await supabase
     .from('users')
@@ -137,9 +139,16 @@ export const updateUserWeight = async (userId: string, newWeight: number): Promi
     .single();
 
   if (userError) {
-    console.error('Error updating user weight:', userError);
-    throw new Error('Failed to update weight');
+    console.error('Error updating user weight in users table:', {
+      error: userError,
+      code: userError.code,
+      message: userError.message,
+      details: userError.details
+    });
+    throw new Error(`Failed to update weight: ${userError.message}`);
   }
+
+  console.log('Successfully updated user weight in users table:', userData);
 
   // Then add weight history entry (this will trigger the points calculation)
   const { data: weightData, error: weightError } = await supabase
@@ -152,8 +161,15 @@ export const updateUserWeight = async (userId: string, newWeight: number): Promi
     .single();
 
   if (weightError) {
-    console.error('Error adding weight history:', weightError);
+    console.error('Error adding weight history entry:', {
+      error: weightError,
+      code: weightError.code,
+      message: weightError.message,
+      details: weightError.details
+    });
+
     if (weightError.code === '23505') {
+      console.log('Attempting to update existing weight entry for today');
       // Update existing entry for today
       const { data: updateData, error: updateError } = await supabase
         .from('weight_history')
@@ -164,8 +180,16 @@ export const updateUserWeight = async (userId: string, newWeight: number): Promi
         .single();
 
       if (updateError) {
-        throw new Error('Failed to update weight history');
+        console.error('Error updating existing weight entry:', {
+          error: updateError,
+          code: updateError.code,
+          message: updateError.message,
+          details: updateError.details
+        });
+        throw new Error(`Failed to update weight history: ${updateError.message}`);
       }
+
+      console.log('Successfully updated existing weight entry:', updateData);
       
       // Get updated user data after points calculation
       const { data: finalUserData, error: finalUserError } = await supabase
@@ -175,13 +199,22 @@ export const updateUserWeight = async (userId: string, newWeight: number): Promi
         .single();
 
       if (finalUserError) {
-        throw new Error('Failed to fetch updated user data');
+        console.error('Error fetching final user data after update:', {
+          error: finalUserError,
+          code: finalUserError.code,
+          message: finalUserError.message,
+          details: finalUserError.details
+        });
+        throw new Error(`Failed to fetch updated user data: ${finalUserError.message}`);
       }
 
+      console.log('Successfully fetched final user data:', finalUserData);
       return { user: finalUserData, weightEntry: updateData };
     }
-    throw new Error('Failed to add weight history');
+    throw new Error(`Failed to add weight history: ${weightError.message}`);
   }
+
+  console.log('Successfully added new weight history entry:', weightData);
 
   // Get updated user data after points calculation (trigger should have updated points)
   const { data: finalUserData, error: finalUserError } = await supabase
@@ -191,9 +224,16 @@ export const updateUserWeight = async (userId: string, newWeight: number): Promi
     .single();
 
   if (finalUserError) {
-    throw new Error('Failed to fetch updated user data');
+    console.error('Error fetching final user data after new entry:', {
+      error: finalUserError,
+      code: finalUserError.code,
+      message: finalUserError.message,
+      details: finalUserError.details
+    });
+    throw new Error(`Failed to fetch updated user data: ${finalUserError.message}`);
   }
 
+  console.log('Successfully fetched final user data after new entry:', finalUserData);
   return { user: finalUserData, weightEntry: weightData };
 };
 
